@@ -1,0 +1,406 @@
+---
+title: "Annual December Real Interest Rates"
+author: "Thomas Vermaelen"
+date: "15 mars 2019"
+output: html_document
+---
+
+## Summary
+
+In this project, we evaluate different models for forecasting one-year-ahead December inflation in order to build a time series of December real interest rates. In particular, we compare the predictive accuracy between two models: AR(1) and Simple Exponential Smoothing (SES). We evaluate the predictive accuracy of one-year-ahead forecasts using roll-forward partioning, where the training window is expanded by one observation for every one-year-ahead forecast. Throughout this process, we attempt to find the optimal learning rate, alpha, for SES. 
+
+Our results reveal that there is no significant difference between an AR(1) and SES in terms of forecasting accuracy. No rate of alpha could alter these results. 
+
+Finally, we plot a times series of real interest rates, in which the values from the one-year-ahead  AR(1) and SES forecasts are used as proxies for expected inflation.    
+
+
+
+## Data Used
+
+ - December 10-, 5-, 3-, and 1-Year Treasury yields (Constant Maturity) from 1953 to 2017
+ 
+ - December CPI from 1947 to 2019
+ 
+  - December inflation from 1948 to 2019, which is computed by taking the difference of logs of consecutive January CPI's,like so: `inflation[y] = log(CPI[y]) - log(CPI[y-1])`
+
+
+## Variables
+
+We use the data frame $rates.yearly$ to store 18 variables:
+
+- $date$, which stores annual dates from December 1953 to December 2017  
+
+- $tcmnom$_$y10$, the 10-Year Treasury Yield (CM) used as a proxy for the nominal rate
+
+- $tcmnom$_$y5$, the 5-Year Treasury Yield (CM) 
+
+- $tcmnom$_$y3$, the 3-Year Treasury Yield (CM) 
+
+- $tcmnom$_$y1$, the 1-Year Treasury Yield (CM) 
+
+- $pi.realized$ stores the one-year-ahead inflation rate relative to the nominal rate (i.e. inflation at $t+1$), from December 1954 to December 2018
+
+- $r$_$y10$, the 10-Year realized real interest rate from December 1953 to December 2017, which is computed the following way: tcmnom_y10 - pi.realized
+
+- $r$_$y5$, the 5-Year realized real interest rate 
+
+- $r$_$y3$, the 3-Year realized real interest rate 
+
+- $r$_$y1$, the 1-Year realized real interest rate 
+
+- $r$_$y10.ar1.roll$ stores the 10-Y real rate forecasted using one-year-ahead AR(1) forecasts of inflation with roll-forward partioning
+
+- $r$_$y10.ses.roll$ stores the 10-Year real rate forecasted using one-year-ahead Simple Exponential Smoothing forecasts of inflation with roll-forward partioning
+
+- $r$_$y5.ar1.roll$ stores the forecasted 5-Y real rate using AR(1)
+
+- $r$_$y5.ses.roll$ stores the forecasted 5-Y real rate using SES
+
+- $r$_$y3.ar1.roll$ stores the forecasted 3-Y real rate using AR(1)
+
+- $r$_$y3.ses.roll$ stores the forecasted 3-Y real rate using SES
+
+- $r$_$y1.ar1.roll$ stores the forecasted 1-Y real rate using AR(1)
+
+- $r$_$y1.ses.roll$ stores the forecasted 1-Y real rate using SES
+
+
+
+## Methodology
+
+In order to build a times series of real interest rates, we attempt to find the best model for predicting inflation based on litterature and statistical testing. the Dickey-Fuller test suggests that December inflation follows a random walk. We wanted to test the AR(1) against a Simple Exponential Smoothing (SES) model knowing that stationary models of inflation tend to perform worse than models which account for a time varying mean ("Forecasting Inflation"" by Faust and Wright). We try to to find the optimal learning rate, alpha, for SES and set it to a default value of 0.2. It is important to note, however, that a high learning rate (alpha) leads to overfitting ("Practical Time Series Forecasting with R" by Schmueli and Lichtendahl Jr).
+
+We first estimate an AR(1) and a SES model on inflation. The Diebold-Mariano test reveals no significant difference between the two models. This is true for any rate of alpha.
+
+Then, we measure the long-term forecasting accuracy of AR(1) and SES using fixed partioning (i.e. the training set is fixed throughout the forecast horizon). The 30-year-ahead forecast spans from December 1989 up to December 2018. No significant difference was found between the two forecasts at any level of alpha. 
+
+Roll-forward partioning was used next to forecast one-year-ahead between 1954 and 2018. With roll-forward partioning, the size of the training set increases by one for each one-year-ahead forecast as we add the next observed (realized) datapoint to the set. Roll-forward partitioning enables us to generate multiple one-year-ahead forecasts and thus gain a more accurate understanding of how the forecast peforms on average. No significant difference was found between AR(1) and SES.
+ 
+Finally, we plot four graphs for every type of interest rates (10Y, 5Y, 3Y, & 1Y), each of which contains the following curves from December 1953 to December 2017:
+
+- the realized real rate (nominal rate minus one-year-ahead realized inflation)
+
+- the forecasted real rate using AR(1) roll-forward forecasts of inflation
+
+- the forecasted real rate using SES roll-forward forecasts of inflation 
+
+```{r cache =FALSE, include= FALSE}
+#knitr::opts_knit$set(root.dir = normalizePath("C:/Users/T.VERMAELEN/Desktop/Adrian BUSS"))
+```
+
+
+```{r echo =FALSE}
+#############################LOAD DATA##################################
+library(openxlsx)
+library(zoo)
+library(plyr)
+library(forecast)
+library(tseries)
+library(urca)
+library(dplyr)
+# Set working directory  (to change accordingly)
+setwd("~/Documents/INSEAD/INSEAD Projects/InterestRatesStudy")
+dir= getwd()
+source("./helpers/LoadRates.R")
+
+# choose month from:"january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"
+month = "December"
+
+#specify starting year
+start.year =1954
+
+rates.yearly <- load.rates(month, start.year, dir)
+## Root Mean Squared error function
+rmse <- function(y, pred){
+  return(sqrt(mean((y-pred)^2)))
+}  
+
+```
+
+
+## Plotting Real vs Nominal Interest Rates
+
+```{r echo=FALSE}
+source("./helpers/GenerateYearlyTimeSeries.R")
+#generate time series for 10-Y rates, plot them
+end.year = as.numeric(substr(rates.yearly$date[nrow(rates.yearly)],1,4))
+generate.yearly.ts(rates.yearly$tcmnom_y10, rates.yearly$r_y10,start.year,end.year, 'Dec 10-Year')
+```
+
+```{r echo=FALSE}
+#generate time series for 5-Y rates, plot them
+generate.yearly.ts(rates.yearly$tcmnom_y5, rates.yearly$r_y5, start.year,end.year,'Dec 5-Year')
+```
+
+
+```{r echo=FALSE}
+#generate time series for 3-Y rates, plot them
+generate.yearly.ts(rates.yearly$tcmnom_y3, rates.yearly$r_y3,start.year,end.year, 'Dec 3-Year')
+```
+
+```{r echo=FALSE}
+#generate time series for 1-Y rates, plot them
+
+generate.yearly.ts(rates.yearly$tcmnom_y1, rates.yearly$r_y1,start.year,end.year, 'Dec 1-Year')
+```
+
+## Model Estimation for Inflation
+**1. Plotting Realized Inflation**
+
+```{r echo=FALSE}
+source("./helpers/LoadCPI.R")
+cpi.yearly = load.cpi(month, year, dir)
+#plot inflation
+pi.ts <- ts(cpi.yearly$realized.inflation,start=c(1948), end =c(2019),  frequency =1 )
+plot(pi.ts, main = 'March Inflation at year = Y (1948 to 2019)', ylab='Percent', xaxs ='i')
+abline(c(0,0))
+grid(col='lightgrey')
+```
+
+
+- Autocorrelations of inflation series:
+```{r echo=FALSE}
+Acf(pi.ts, main = 'Autocorrelations of Inflation')
+```
+
+_Geometric decay of Acf suggests AR or ARMA process_
+
+-  PArtial Autocorrelations of inflation series:
+```{r echo=FALSE}
+Pacf(pi.ts, main = 'Autocorrelations of Inflation')
+```
+
+_Large significant autocorrelation at lag 1 suggests AR(1)_
+
+- Dickey-Fuller Test#1 on inflation, where Null = unit root, Alternative = Stationary AR(1):
+```{r echo=FALSE}
+### Dickey-Fuller test #1
+summary(ur.df(pi.ts, type='none',selectlags = 'BIC'))
+```
+
+ _Dickey-Fuller Test#1 reveals a significant unit root at a 5% level, therefore, inflation series follows a random walk_
+ 
+
+- Model selection using Bayesian information Criterion:
+```{r echo=FALSE}
+#select ARIMA model based on Bayesian Information Criterion
+bic.mod <- auto.arima(pi.ts, d=0, ic ='bic', seasonal =FALSE)
+summary(bic.mod)
+
+```
+_Model selection using BIC suggests AR(1)._
+
+
+**2. Comparing Ar(1) with Simple Exponential Smoothing (SES)**
+
+- Model accuracy:
+
+```{r echo=FALSE}
+# fit AR(1) model to full inflation series (1948-2019)
+ar1.mod <- Arima(pi.ts, order=c(1,0,0))
+#now fit SES
+ses.mod <- ets(pi.ts, model ='ANN', alpha =0.2)
+### Show RMSE's for both
+print('RMSE for AR(1):')
+rmse(pi.ts, fitted(ar1.mod))
+print('RMSE for SES:')
+rmse(pi.ts, fitted(ses.mod))
+#perform Diebold-Mariano test on both models
+dm.test(ar1.mod$residuals, ses.mod$residuals)
+
+```
+
+_RMSE of AR(1) is 1.919 which is lower than for SES (RMSE= 2.174). The Diebold-Mariano test shows no  significant difference in accuracy between both models at a 5% lvl (p-value for two-sided test = 0.129). No rate of alpha could change this._
+
+```{r echo=FALSE}
+#Plot AR(1) and SES estimates
+plot(pi.ts, ylab ='Percent', main = 'Estimated Models of December Inflation (1948 to 2019)', xaxs='i')
+lines(fitted(ar1.mod), col ='blue', lwd=2)
+lines(fitted(ses.mod), col='red', lty =2, lwd=2)
+legend('topright', c('AR(1)', 'SES'), col=c('blue', 'red'), lty=c(1,2), lwd=2, cex =0.85)
+abline(c(0,0))
+grid(col='lightgrey')
+```
+
+## Forecasting Inflation
+
+**1. 30-year-ahead Forecast with fixed partitioning (forecast horizon: 1990 to 2019)**
+```{r echo=FALSE}
+# set forecast horizon to 30 years
+nValid <- 30
+
+###### AR(1) vs SES forecasting using fixed partitioning 
+#training set: 1948 to 1989
+train <-  window(pi.ts, end=c(1989), freq =1)
+#validation set: 1990 to 2019
+valid <- window(pi.ts, start=c(1990), freq =1)
+# AR(1) on training set
+ar1.train <- Arima(train, order=c(1,0,0))
+# forecast values until 2019 for AR1
+ar1.fixed <- forecast(ar1.train, h=nValid, level =95)
+
+# SES on train
+ses.train <- ets(train, model = 'ANN', alpha =0.2)
+# ses forecast 
+ses.fixed <- forecast(ses.train, h =nValid, level =95)
+
+```
+
+
+- Accuracy of 30-year-ahead forecast of inflation:
+```{r echo=FALSE}
+### print RMSE's and results of Diebold-Mariano Test
+print('RMSE of AR(1) forecast:')
+rmse(valid, ar1.fixed$mean)
+print('RMSE of SES forecast:')
+rmse(valid, ses.fixed$mean)
+dm.test(ar1.fixed$residuals, ses.fixed$residuals)
+```
+
+
+_RMSE for AR(1) is lower than for SES. D-M test reveals no significant difference in accuracy at a 5% lvl. Again, no significant value for alpha._
+
+
+- Graphical representation:
+
+```{r echo=FALSE}
+### plot fixed forecasts
+plot(pi.ts, ylab='Percent', main = '30-year-ahead Fcast of Inflation using Fixed Part. (1990-2019)', xaxs= 'i')
+abline(v=c(1990,0), lty=2)
+abline(c(0,0))
+grid(col = 'lightgrey')
+text(1985, 12, 'Training', cex =1.25)
+text(1996, 12, 'Validation', cex =1.25)
+lines(valid, col='black')
+lines(ar1.fixed$mean, col = 'blue', lwd =2)
+lines(ses.fixed$mean, col= 'red', lty =2 ,lwd=2)
+legend('topright', c('AR(1)', 'SES'), col=c('blue', 'red'), lty=c(1,2),lwd=2, cex =0.85)
+```
+
+
+**2. One-year-ahead Forecasts with Roll-Forward partitioning (horizon: 1954 to 2018)**
+
+```{r echo=FALSE}
+######## Ar(1) vs SES forecasts using roll-forward partioning 
+#####AR(1)
+#set forecast horizon 
+n <- nrow(rates.yearly)
+# set validation window
+valid.roll <- window(pi.ts, start = c(start.year+1), end = c(start.year+n), freq =1) 
+# initialize vector which will contains forecasts
+ar1.roll <- rep(0,n)
+
+#perform forecasts using roll-forward partitioning 
+for (i in 0:(n-1)) {
+  # move training window along one point each time starting in year 1962
+  train.temp <- window(pi.ts, end=c(start.year+i), freq =1)
+  # train on recursive window
+  ar1.model <- Arima(train.temp,order=c(1,0,0))
+  #one-step-ahead forecast
+  onestep <- forecast(ar1.model,h=1, level=95)
+  # store fcast value
+  ar1.roll[i+1] <- onestep$mean
+}
+
+## SES forecasts 
+ses.roll <- rep(0,n)
+
+# roll-forward for SES
+for (i in 0:(n-1)) {
+  # move training window along one point each time start in year 1962
+  train.temp <- window(pi.ts, end=c(start.year+i))
+  # train on recursive window
+  ses.model <- ets(train.temp,model ='ANN', alpha =0.2)
+  #one-step-ahead forecast
+  onestep <- forecast(ses.model,h=1, level=95)
+  # forecast is the i+1 element of the fitted model
+  ses.roll[i+1] <- onestep$mean
+}
+
+```
+
+ - Accuracy of one-year-ahead forecasts using roll-forward partitioning:
+```{r echo=FALSE}
+### RMSE's and D-M test
+print('RMSE for recursive AR(1)')
+rmse(valid.roll, ar1.roll)
+print('RMSE for recursive SES')
+rmse(valid.roll, ses.roll)
+dm.test(valid.roll-ar1.roll, valid.roll-ses.roll)
+```
+_RMSE for AR(1) is lower than for SES, however, the difference is not significant at a 5% lvl. No value of alpha can change this._
+
+
+- Graphical Representation:
+
+```{r echo=FALSE}
+#plot roll-forward fcasts
+ar1.roll.ts <- ts(ar1.roll,start=c(start.year+1),freq=1)
+ses.roll.ts<- ts(ses.roll, start =c(start.year+1), freq =1)
+title = paste('Fcasts of Inflation using Roll-Forward Part. (',start.year+1,'-',start.year+n,')', sep="")
+plot(pi.ts, main = title, ylab='Percent', xaxs='i')
+abline(v=c(start.year+1,0), lty=2)
+abline(c(0,0))
+grid(col ='lightgrey')
+lines(ar1.roll.ts, col='blue', lwd=2)
+lines(ses.roll.ts, col='red', lwd=2, lty =2)
+legend('topright', c('AR(1)', 'SES'), col=c('blue', 'red'), lty=c(1,2), lwd=2, cex =0.85)
+```
+
+
+**Conclusion: There is no significant difference between AR(1) and SES long-term forecasts. This is also true for one-year-ahead forecasts.**
+
+
+## Plotting Real Interest Rates using Roll-Forward Forecasts of Inflation
+
+```{r echo=FALSE}
+#Store real rates using fcasts of inflation
+rates.yearly$r_y10.ar1.roll <-round(rates.yearly$tcmnom_y10 - ar1.roll,2) 
+rates.yearly$r_y10.ses.roll <- round(rates.yearly$tcmnom_y10 - ses.roll,2)
+
+rates.yearly$r_y5.ar1.roll <-round(rates.yearly$tcmnom_y5 - ar1.roll,2) 
+rates.yearly$r_y5.ses.roll <- round(rates.yearly$tcmnom_y5 - ses.roll,2)
+
+rates.yearly$r_y3.ar1.roll <-round(rates.yearly$tcmnom_y3 - ar1.roll,2) 
+rates.yearly$r_y3.ses.roll <- round(rates.yearly$tcmnom_y3 - ses.roll,2)
+
+rates.yearly$r_y1.ar1.roll <-round(rates.yearly$tcmnom_y1 - ar1.roll,2) 
+rates.yearly$r_y1.ses.roll <- round(rates.yearly$tcmnom_y1 - ses.roll,2)
+
+############################ Save real rates to file ###########################
+if(!dir.exists("./output_data")){
+  dir.create("./output_data")
+}  
+file.path = paste("./output_data/",month, 'RealRateFcastsYearly.csv', sep="")
+write.csv(rates.yearly, file= file.path)
+```
+
+```{r echo=FALSE}
+###generate time series for 10-Y rates, plot them
+generate.yearly.ts(rates.yearly$tcmnom_y10,rates.yearly$r_y10, start.year, end.year, paste(month, "10-Y"), rates.yearly$r_y10.ar1.roll,rates.yearly$r_y10.ses.roll )
+```
+
+_In the graph above, we can see the nominal rate plotted against the realized real rate as well as the forecasted real rates. For each forecasted real rate (AR(1) & SES), the value of $r$ at year $y$ is computed by subtracting forecasted inflation at year $y+1$ from the nominal rate at year $y$._
+
+```{r echo=FALSE}
+###generate time series for 5-Y rates, plot them
+generate.yearly.ts(rates.yearly$tcmnom_y5,rates.yearly$r_y5, start.year, end.year, paste(month, "5-Y"), rates.yearly$r_y5.ar1.roll,rates.yearly$r_y5.ses.roll )
+```
+
+```{r echo=FALSE}
+###generate time series for 3-Y rates, plot them
+generate.yearly.ts(rates.yearly$tcmnom_y3,rates.yearly$r_y3, start.year, end.year, paste(month, "3-Y"), rates.yearly$r_y3.ar1.roll,rates.yearly$r_y3.ses.roll )
+
+```
+
+
+```{r echo=FALSE}
+###generate time series for 1-Y rates, plot them
+generate.yearly.ts(rates.yearly$tcmnom_y1,rates.yearly$r_y1, start.year, end.year, paste(month, "1-Y"), rates.yearly$r_y1.ar1.roll,rates.yearly$r_y1.ses.roll)
+```
+
+## Sources
+
+Forecasting Inflation: Faust & Wright, Chapter Chapter 1 in Handbook of Economic Forecasting, 2013, vol. 2, pp 2-56 from Elsevier
+
+TS forecasting in R: Schmueli, G. C., & Lichtendahl, K. C. (2016). Practical Time Series Forecasting in R (2nd ed.). Axelrod Schnall.
