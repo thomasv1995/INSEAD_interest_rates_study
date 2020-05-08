@@ -1,0 +1,396 @@
+---
+title: "Interest Rates & Bond Supply Study"
+author: "Thomas Vermaelen"
+date: "6/27/2019"
+output: html_document
+---
+
+## Summary
+In this study, we attempt to find an IV to study the relationship between price informativeness and US interest rates. The ratio of US publicly owned debt to GDP is used as an IV.
+
+As an initial step, we regress Annual US Treasury rates (treasury_yield) on Bond supply (Debt/GDP). We then run the diagnostics for the regression and fit the appropriate transformations to the data.
+
+We then look at the significance of adding a linear time trend. The trend variable ends up being significant without affecting the significance of our IV, log(Debt/GDP)
+
+In order to capture the autocorrelation of the residuals from our initial (transformed) regression we evaluate two different techniques:
+
+  - The Feasible Generalized Least Squares (FGLS) regression (Pairs-Winsten), where the independent variable log(Debt/GDP) is assumed to be exogenous
+
+  - OLS using serial correlation-robust standard error of the coefficient on log(Debt/GDP) (Newey-West’s HAC)
+
+In both cases, we find log(Debt/GDP) to be significant
+
+
+
+## Variables
+
+All variables are stored in the table $bond.data$:
+
+- $Fiscal Year$, US fiscal Year from 1919 to 2012, which is assumed to run from June 30 of the previous year up to September 30 of the given year (e.g. 2012 FY runs from June 30, 2011 to September 30, 2012). This is according to Krishnamurthy & Vissing-Jorgensen (2012), Appendix B
+
+- $bond$_$supply$ (Debt/GDP) is the supply of Treasuries scaled by GDP, at market value, calculated as: (Debt/GDP)*(Total mkt value of T-Bills/total face value of T-Bills), for the given fiscal year. The series comes from Henning Bohn and has been annualized.
+
+- $treasury$_$yield$ is the 10-Year Treasury Constant Maturity yield on September 30 (end of FY in the US)
+
+## Methodology
+
+- Perform Regression analysis with US interested rates as a dependent variable and US bond supply as an independent variable; check OLS assumptions 
+
+- To make sure the relationship between interest rates and bond supply is not spurious, check for a time trend in the data
+
+- Control for autocorrelations in bond supply by estimating model parameters using FBLS and adjusting the standard errors using Newey-West's HAC
+
+```{r cars, message=TRUE, warning=TRUE, include=FALSE}
+
+########################################## LOAD DATA #################################
+library(readxl)
+library(ggplot2)
+library(urca)
+library(forecast)
+library(tseries)
+library(zoo)
+
+Sys.setenv(TZ="America/Los_Angeles")
+
+# set working directory 
+#setwd("C:/Users/T.VERMAELEN/Adrian BUSS")
+setwd("~/Documents/INSEAD/INSEAD Projects/InterestRatesStudy")
+
+treasury.data <-read_excel("./input_data/DebtUS-data from Henning Bohn.xls", sheet =2)
+interest.rates <- read_excel("./input_data/Treasury_yields_annual.xls", sheet =1)
+
+# get Debt/GDP data starting from 1919 (when interest.rates starts)
+start.index <- which(treasury.data$`Fiscal Year` == interest.rates$observation_date[1])[1]
+bond.supply <- treasury.data$`Debt/GDP, end of period`[start.index:nrow(treasury.data)]
+
+# store all variables in bond.data
+bond.data <- interest.rates
+bond.data$bond_supply<- bond.supply
+names(bond.data)[names(bond.data)=="observation_date"] <- "Fiscal Year"
+names(bond.data)[names(bond.data)=="LTGOVTBD"] <- "treasury_yield"
+
+## generate log variables
+bond.data$log_treasury_yield <- log(bond.data$treasury_yield)
+bond.data$log_bond_supply <- log(bond.data$bond_supply)
+```
+
+
+## Regression Analysis
+
+### 1. a) Regressing treasury_yield on Debt/GDP
+
+```{r, echo= FALSE}
+regression <- lm(formula = treasury_yield~ bond_supply, data = bond.data)
+ggplot(bond.data, aes(x=bond_supply, y= treasury_yield)) + geom_point(shape='o', col ='blue', size =3) + ggtitle('Relationship between Sep Interest Rates and Bond Supply') +geom_smooth(method='lm',formula=y~x) + theme(plot.title = element_text(hjust = 0.5)) + labs(x ="Debt/GDP", y = "treasury_yield (%)")
+summary(regression)
+```
+_Regression analysis yields a significant coefficient of -5.756 on Debt/GDP implying that an increase in the ratio of Debt/GDP by 1 leads to a decrease in the interest rate by 5.76 percentage points. This interpretation is not very intuitive, therefore, it would make more sense to take logs of the variables_
+
+
+### 1. b) Regression Diagnostics for treasury_yield ~ Debt/GDP
+
+#### Linearity 
+
+```{r, echo=FALSE}
+#linearity:
+plot(regression, 1)
+
+```
+
+_Non-linearity is present. This suggests that a non-linear transformation of the independent variable is more appropriate_ 
+
+#### Homoskedasticity
+
+```{r, echo= FALSE}
+plot(regression, 3)
+```
+
+_Variance increases for larger values of Y implying that a log-transformation of the dependent variable is needed, which we will perform next_
+
+#### Normality of Residuals
+
+```{r, echo=FALSE}
+qqnorm(regression$residuals)
+qqline(regression$residuals, col = 'red')
+```
+
+_Residuals seem to be non-normally distributed_ 
+
+### 2. a) Regressing treasury_yield on log(Debt/GDP) 
+
+```{r, echo= FALSE}
+regression <- lm(formula = treasury_yield~ log_bond_supply, data = bond.data)
+ggplot(bond.data, aes(x=log_bond_supply, y= treasury_yield)) + geom_point(shape='o', col ='blue', size =3) + ggtitle('Relationship between Interest Rates and log(Bond Supply)') +geom_smooth(method='lm',formula=y~x) + theme(plot.title = element_text(hjust = 0.5)) + labs(x ="log(Debt/GDP)", y = "treasury_yield (%)")
+summary(regression)
+```
+
+_Regression reveals a coefficient of -2.312 for log(bond supply) that is significant at a 5% level signifying that a 1% change in Debt/GDP leads to a decrease in the interest rate by aproximately 0.02 percentage points. R- squared = 0.137 (slightly better than above)_
+
+
+### 2. b) Regression diagnostics for treasury_yield ~ log(Debt/GDP)
+
+#### Homoskedasticity
+
+```{r, echo= FALSE}
+plot(regression, 3)
+```
+
+_Variance seems to increase at larger values of log(bond supply) still suggesting a log-transformation of treasury yield_ 
+
+#### Normality of Residuals
+
+```{r, echo=FALSE}
+qqnorm(regression$residuals)
+qqline(regression$residuals, col = 'red')
+```
+
+_Residuals do not seem to be normally distributed_
+
+
+### 3 . a) Regressing Log(treasury_yield) ~ Log(Debt/GDP)
+
+
+```{r, echo= FALSE}
+regression <- lm(formula = log_treasury_yield~ log_bond_supply, data = bond.data)
+ggplot(bond.data, aes(x=log_bond_supply, y= log_treasury_yield)) + geom_point(shape='o', col ='blue', size =3) + ggtitle('Relationship between log(Interest Rates) and log(Bond Supply)') +geom_smooth(method='lm',formula=y~x) + theme(plot.title = element_text(hjust = 0.5)) + labs(x ="log(Debt/GDP)", y = "log(treasury_yield)")
+summary(regression)
+```
+
+_Coefficient on log(bond supply) is -0.525 and significant. A 1% change in Debt/GDP leads to a 0.53% decrease in interest rates. R-squared is 0.201, which is 46.72% improvement on the previous model._
+
+### 3. b) Regression diagnostics for Log(treasury_yield) ~ Log(Debt/GDP)
+
+
+#### Homoskedasticity
+
+```{r, echo= FALSE}
+plot(regression, 3)
+```
+
+_Not sure if Homoskedacity seems to improve_
+
+#### Normality of Residuals
+```{r, echo=FALSE}
+qqnorm(regression$residuals)
+qqline(regression$residuals, col = 'red')
+```
+
+_Normality of residuals looks better_
+
+
+_PACF suggests largelly significant lag 1 after controlling for other lags_ 
+
+#### Time series plot of residuals
+```{r, echo =FALSE}
+resid.ts <- ts(regression$residuals, start = 1919, freq =1)
+plot(resid.ts, main = "Time series of residuals (log(treasury_yield) ~ log(Debt/GDP))", ylab= "Residuals")
+```
+
+
+### Fitting Time Trend
+
+```{r, echo = FALSE}
+log_treasury_yield.ts <- ts(log(bond.data$treasury_yield), start = 1919, freq = 1)
+plot(log_treasury_yield.ts, main = "Time Series of log(treasury_yield)", xlab = "Year", ylab = "log(treasury_yield)")
+```
+
+_Graph suggests there is long-term linear trend perhaps even a quadratic one_
+
+#### Fit linear time trend
+
+```{r, echo = FALSE}
+## fit linear trend
+bond.data$trend <- seq(1,94)
+
+lin.trend.mod <- lm(bond.data$log_treasury_yield~bond.data$trend )
+fitted.ts <- ts(lin.trend.mod$fitted.values, start = 1919, freq =1)
+plot(log_treasury_yield.ts, main = "Time Series of treasury_yield with linear time trend", xlab = "Year", ylab = "log(treasury_yield)")
+lines(fitted.ts, col = 'blue')
+summary(lin.trend.mod)
+
+```
+
+_Model suggests the presence of a linear time trend . R-squared = 0.309_
+
+#### Fit quadratic time trend
+
+```{r, echo = FALSE}
+## fit linear trend
+bond.data$trend_sqrd <- (bond.data$trend)^2
+
+lin.trend.mod <- lm(bond.data$log_treasury_yield~bond.data$trend + bond.data$trend_sqrd )
+fitted.ts <- ts(lin.trend.mod$fitted.values, start = 1919, freq =1)
+plot(log_treasury_yield.ts, main = "Time Series of treasury_yield with quadratic time trend", xlab = "Year", ylab = "log(treasury_yield)")
+lines(fitted.ts, col = 'blue')
+summary(lin.trend.mod)
+
+```
+_Model suggests no presence of a qudratic time trend_
+
+#### Adding back log(Debt/GDP) to the regression: log(treasury_yield) ~ Trend 
+
+```{r, echo=FALSE}
+## adding log(debt/GDP)
+
+lin.trend.mod<- lm(bond.data$log_treasury_yield ~ bond.data$trend + bond.data$log_bond_supply) 
+
+summary(lin.trend.mod)
+
+```
+_Coefficient of log(bond supply) is still significant after adding linear trend, it seems as if the relationship between log(treasury yield) and log(Debt/GDP) is not spurious. R-squared = 0.594_
+
+
+#### Linear trend model diagnostics : log(treasury_yield) ~ log(Debt/GDP) + Trend
+
+#### Homoskedasticity 
+
+```{r, echo =FALSE}
+plot(lin.trend.mod, 3)
+
+```
+
+_Homoskedasdicity seems to improve compared to the model without a linear trend._
+
+#### Normality
+
+```{r, echo =FALSE}
+qqnorm(lin.trend.mod$residuals)
+qqline(lin.trend.mod$residuals, col = 'red')
+```
+
+_Normality still looks somewhat good_
+
+#### Autocorrelation of residuals
+
+```{r, echo =FALSE}
+Acf(lin.trend.mod$residuals)
+Pacf(lin.trend.mod$residuals)
+resid.ts <- ts(lin.trend.mod$residuals, start = 1919, freq =1)
+```
+
+_PACF suggests largelly significant lag 1 after controlling for other lags_ 
+
+#### Time series plot of residuals
+```{r, echo =FALSE}
+resid.ts <- ts(lin.trend.mod$residuals, start = 1919, freq =1)
+plot(resid.ts, main = "Time series of residuals (log(treasury_yield) ~ log(Debt/GDP))", ylab= "Residuals")
+```
+
+### Accounting for Autocorrelation 
+
+#### 1. Feasible Generalized Least Squares (Pairs-Winsten), assuming strict exogeneity of X 
+
+##### Method:
+1. Run OLS on log(treasury_yield) and log(Debt/GDP) and obtain residuals
+2. Run AR(1) on residuals, save coefficient $\rho$:
+3. Run OLS on the following (provided that the intercept coefficient is divided by $1 - \rho$):
+    - $\log(treasury \_ yield_t) - \rho log(treasury\_ yield_{t-1})$
+    - $\log(bond \_ supply_t) - \rho \log(bond\_ supply_{t-1})$
+
+```{r, echo =FALSE}
+#Use Prais-Winsten FGLS
+
+#Step 1
+mod <- lm(bond.data$log_treasury_yield~bond.data$log_bond_supply)
+mod.resid <- as.data.frame(mod$residuals)
+
+#Step 2
+resid.t.minus.one <- mod.resid$`mod$residuals`[1:93]
+mod.resid <-as.data.frame(mod.resid[-1,])
+mod.resid$resid.t.minus.one <- resid.t.minus.one
+resid.reg <- lm(mod.resid$`mod.resid[-1, ]`~mod.resid$resid.t.minus.one)
+rho <- resid.reg$coefficients[[2]]
+
+#Step 3
+FGLS <- as.data.frame(bond.data$log_treasury_yield[2:94])
+names(FGLS)[names(FGLS)== "bond.data$log_treasury_yield[2:94]"] = "yt"
+FGLS$yt.minus.one <- bond.data$log_treasury_yield[1:93]
+
+FGLS$xt <- bond.data$log_bond_supply[2:94]
+FGLS$xt.minus.one <- bond.data$log_bond_supply[1:93]
+FGLS$y.tilde <- FGLS$yt - rho*FGLS$yt.minus.one
+FGLS$x.tilde <- FGLS$xt - rho*FGLS$xt.minus.one
+
+
+
+fgls.reg <- lm(FGLS$y.tilde~FGLS$x.tilde)
+## make sure to divide B0 by 1-rho
+
+FGLS$year <- bond.data$`Fiscal Year`[2:94]
+
+ggplot(FGLS, aes(x=x.tilde, y= y.tilde)) + geom_point(shape='o', col ='blue', size =3) + ggtitle('Relationship between log(treasury_yield) and log(Debt/GDP) under FGLS') +geom_smooth(method='lm',formula=y~x) + theme(plot.title = element_text(hjust = 0.5)) + labs(x ="log(Debt/GDP)", y = "log(treasury_yield)")
+
+summary(fgls.reg)
+```
+
+_Using FGLS (Pairs-Winsten), the coefficient on log(Debt/GDP) is -0.245 and signficant, suggesting that a 1% increase in bond supply leads to a 0.25% decrease in interest rates. However, R-squared is very low with a value of = 0.072_
+
+### 2. Diagnostics of FBLS
+
+```{r, echo =FALSE}
+qqnorm(fgls.reg$residuals)
+qqline(fgls.reg$residuals, col = 'red')
+```
+
+_Normality of residuals improves slightly_
+
+```{r, echo =FALSE}
+plot(fgls.reg, 3)
+```
+
+_Homoskedasticity looks good for larger fitted values._
+
+```{r, echo =FALSE}
+Acf(fgls.reg$residuals)
+Pacf(fgls.reg$residuals)
+```
+
+_Autocorrelation has been accounted for_
+
+
+### Using OLS and Newey-West Heteroskedastic and Autocorrelation Consistent (HAC) standard errors
+
+#### Method:
+  1. run OLS on Log(treasury_yield) ~ log(Debt/GDP)
+  2. compute the correction factor that adjusts for serially correlated errors using the estimated autocorrelation coefficient and a chosen truncation parameter
+  3. derive the Newey-West variance estimator using correction factor and use it to compute the HAC standard error for the estimated coefficient of log(Debt/GDP)
+
+```{r, echo=FALSE, warning=FALSE}
+
+library(sandwich)
+library(lmtest)
+ols.reg <- lm(bond.data$log_treasury_yield~bond.data$log_bond_supply)
+n <- 94
+# rule of thumb truncation parameter
+m <- floor(0.75 * n^(1/3)) 
+
+NW_VCOV <- NeweyWest(ols.reg, 
+              lag = m-1, prewhite = F, 
+              adjust = T)
+hac.se <- sqrt(diag(NW_VCOV))[2]
+
+coeftest(ols.reg, vcov = NW_VCOV)
+
+```
+
+_OLS regression with serial correlation-robust standard errors yields a significant coefficient of -0.525 for log(Debt/GDP)_ 
+
+```{r, echo=FALSE, warning=FALSE}
+if(!dir.exists("./output_data")){
+  dir.create("./output_data")
+}  
+
+write.csv(bond.data[,-6], file= "./output_data/KrishnamurthyStudy.csv")
+```
+
+## Sources
+
+http://www.sthda.com/english/articles/39-regression-model-diagnostics/161-linear-regression-assumptions-and-diagnostics-in-r-essentials/#linearity-of-the-data
+
+OLS assumptions: https://statisticsbyjim.com/regression/ols-linear-regression-assumptions/
+
+GLS and autocorrelation : https://pdfs.semanticscholar.org/7c1b/5ba81a4fcde9abe7efe49228244a98d5ce11.pdf 
+
+FBLS regression: https://www.youtube.com/watch?v=GsLacO_ZJ-s 
+
+Newey-West HAC : https://www.econometrics-with-r.org/15-4-hac-standard-errors.html 
