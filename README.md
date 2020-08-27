@@ -1,5 +1,6 @@
 # US Real Interest Rates Study
 *Thomas Vermaelen*  
+
 This study is part of the research paper "Learning from Interest Rates: Implications for Stock-Market Efficiency" by Matthijs Breugem, Adrian Buss &amp; Joel Peress (paper: https://www.carloalberto.org/wp-content/uploads/2019/01/BBP-LearnBondMarket-20190318.pdf). I evaluate different models for forecasting inflation in order to build multiple time series of US real interest rates that are computed using the forecasted inflation series. Furthermore, I the study the relationship between the US bond supply and real interest rates (Krishnamurthy study) to determine if bond supply is a good instrumental variable for studying the relationship between interest rates and price informativeness (a.k.a. stock market efficiency). The main objectives of this code are to visualize various times series for real interest rates that are computed based on different forecasting models, nominal interest rates (1-, 3-, 5-, 10-Y Treasury rates), timeframes (monthly vs annual) and reference months (for annual series). 
 
 For better visualization of my results and learning about the respective the methodologies, associated RMarkdowns can be viewed using the following links:  
