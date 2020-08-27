@@ -10,9 +10,13 @@ For better visualization of my results and learning about the respective the met
 
 ## Scripts  
 
-• "Annual_December_Real_Interest_Rates.Rmd": evaluates forecasting models for yearly inflation and shows results for yearly real interest rates using December as the reference month. Also outputs the computed annual real interest rate time series as a csv file.   
+• "Annual_December_Real_Interest_Rates.Rmd": evaluates forecasting models for yearly inflation and shows results for yearly real interest rates using December as the reference month. Also outputs the computed annual real interest rate time series as a csv file   
+
 • "Annual_March_Real_Interest_Rates.Rmd": same as above but using March as the reference month  
-• "Annual_Real_Interest_Rates.R": R program which essentially performs the same routine as above except that the user is prompted for a reference month and starting year. This made it easy for professors Adrian Buss and Joël Peress to instantly get results for difference reference months  
+
+• "Annual_Real_Interest_Rates.R": R program which essentially performs the same routine as above except that the user is prompted for a reference month and starting year. This made it easy for professors Adrian Buss and Joël Peress to instantly get results for difference reference months 
+
 • "Monthly_Real_Interest_Rates.Rmd": evaluates monthly inflation forecasting models and presents results. Outputs the monthly real interest rate time series as a csv  
+
 • "Krishnamurthy_Study.Rmd": Using Krishnamurthy & Vissing-Jorgensen, 2012 as reference, I perform linear regression to study the relationship between US Treasury Supply and real interest rates. The ultimate goal for professors Adrian Buss & Jöel Peress is to find a good instrumental variable (IV) to stud the relationship between real interest rates and stock price informativeness
 
